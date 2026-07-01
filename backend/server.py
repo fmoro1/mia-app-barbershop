@@ -218,6 +218,15 @@ class BookingIn(BaseModel):
     notes: Optional[str] = ""
     reminder_hours_before: Optional[int] = 24  # user picks when reminder is sent (24=day before, 2=same day)
 
+class AdminBookingCreate(BaseModel):
+    service_id: str
+    start_at: datetime
+    user_id: Optional[str] = None  # existing customer (optional)
+    walk_in_name: Optional[str] = None  # else walk-in name
+    walk_in_phone: Optional[str] = None  # walk-in phone
+    walk_in_email: Optional[str] = None  # walk-in email
+    notes: Optional[str] = ""
+
 class BookingUpdate(BaseModel):
     start_at: Optional[datetime] = None
     duration_minutes: Optional[int] = None
@@ -702,6 +711,96 @@ async def cancel_booking(booking_id: str, user=Depends(get_user_from_token)):
     return {"ok": True}
 
 # ---------------- ADMIN BOOKINGS ----------------
+@api.post("/admin/bookings")
+async def admin_create_booking(data: AdminBookingCreate, user=Depends(require_admin)):
+    """Admin creates a booking on behalf of a customer (existing user or walk-in)."""
+    svc = await services_col.find_one({"service_id": data.service_id}, {"_id": 0})
+    if not svc:
+        raise HTTPException(status_code=404, detail="Servizio non trovato")
+
+    start_at = data.start_at
+    if start_at.tzinfo is None:
+        start_at = start_at.replace(tzinfo=TZ)
+    else:
+        start_at = start_at.astimezone(TZ)
+    duration = int(svc["duration_minutes"])
+    end_at = start_at + timedelta(minutes=duration)
+
+    # Resolve customer info
+    target_user_id: Optional[str] = None
+    cust_name: str = ""
+    cust_email: str = ""
+    cust_phone: Optional[str] = None
+    if data.user_id:
+        u = await users_col.find_one({"user_id": data.user_id}, {"_id": 0, "password_hash": 0})
+        if not u:
+            raise HTTPException(status_code=404, detail="Cliente non trovato")
+        target_user_id = u["user_id"]
+        cust_name = u.get("name") or u["email"]
+        cust_email = u["email"]
+        cust_phone = u.get("phone")
+    else:
+        if not (data.walk_in_name or data.walk_in_phone):
+            raise HTTPException(status_code=400, detail="Fornisci un cliente esistente o nome/telefono walk-in")
+        cust_name = data.walk_in_name or "Walk-in"
+        cust_email = data.walk_in_email or ""
+        cust_phone = data.walk_in_phone
+
+    # Conflict check
+    day_start_local = datetime.combine(start_at.date(), time(0, 0), tzinfo=TZ)
+    day_end_local = day_start_local + timedelta(days=1)
+    same_day = await bookings_col.find({
+        "start_at": {"$gte": day_start_local.astimezone(timezone.utc), "$lt": day_end_local.astimezone(timezone.utc)},
+        "status": {"$ne": "cancelled"},
+    }, {"_id": 0}).to_list(500)
+    for b in same_day:
+        bs = b["start_at"]
+        if bs.tzinfo is None:
+            bs = bs.replace(tzinfo=timezone.utc)
+        bs = bs.astimezone(TZ)
+        be = bs + timedelta(minutes=int(b.get("duration_minutes", SLOT_MINUTES)))
+        if start_at < be and end_at > bs:
+            raise HTTPException(status_code=409, detail="Orario non disponibile")
+
+    # Verify open window
+    windows = await get_open_windows_for_date(start_at.date())
+    slot_ok = any(
+        start_at >= datetime.combine(start_at.date(), w[0], tzinfo=TZ)
+        and end_at <= datetime.combine(start_at.date(), w[1], tzinfo=TZ)
+        for w in windows
+    )
+    if not slot_ok:
+        raise HTTPException(status_code=400, detail="Orario fuori dall'apertura del salone")
+
+    booking = {
+        "booking_id": new_id("bkg"),
+        "user_id": target_user_id,
+        "user_name": cust_name,
+        "user_email": cust_email,
+        "user_phone": cust_phone,
+        "walk_in": target_user_id is None,
+        "service_id": data.service_id,
+        "service_name": svc["name"],
+        "start_at": start_at,
+        "duration_minutes": duration,
+        "notes": data.notes or "",
+        "reminder_hours_before": 24,
+        "reminder_sent": False,
+        "same_day_reminder_sent": False,
+        "status": "confirmed",
+        "total_cents": int(svc["price_cents"]),
+        "deposit_cents": 0,
+        "must_pay_online": False,
+        "payment_status": "unpaid",
+        "stripe_payment_intent_id": None,
+        "created_at": now_utc(),
+        "created_by_admin": user["user_id"],
+    }
+    await bookings_col.insert_one(booking)
+    booking.pop("_id", None)
+    booking["start_at"] = start_at.isoformat()
+    return booking
+
 @api.get("/admin/bookings")
 async def admin_list_bookings(date_str: Optional[str] = Query(None, alias="date"), user=Depends(require_admin)):
     query = {}

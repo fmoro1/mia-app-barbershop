@@ -6,6 +6,7 @@ import { useFocusEffect } from "expo-router";
 import { Calendar } from "react-native-calendars";
 import { api } from "@/src/api";
 import { theme, formatCents, formatDuration } from "@/src/theme";
+import AdminNewBookingModal from "@/src/components/admin-new-booking-modal";
 
 type Booking = {
   booking_id: string; user_name?: string; user_email: string; service_name: string;
@@ -30,6 +31,7 @@ export default function AdminDiary() {
   const [unread, setUnread] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [newBookingOpen, setNewBookingOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -174,6 +176,17 @@ export default function AdminDiary() {
         )}
       </ScrollView>
 
+      <Pressable testID="admin-new-booking-fab" onPress={() => setNewBookingOpen(true)} style={styles.fab}>
+        <Ionicons name="add" size={28} color={theme.colors.onBrand} />
+      </Pressable>
+
+      <AdminNewBookingModal
+        visible={newBookingOpen}
+        initialDate={date}
+        onClose={() => setNewBookingOpen(false)}
+        onCreated={() => { load(); }}
+      />
+
       <Modal visible={datePickerOpen} transparent animationType="slide" onRequestClose={() => setDatePickerOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setDatePickerOpen(false)} />
         <View style={styles.notifSheet}>
@@ -299,4 +312,5 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", padding: theme.spacing.xxxl, gap: theme.spacing.md },
   emptyText: { color: theme.colors.onSurface, fontSize: theme.fontSize.lg, fontWeight: "500" },
   emptySub: { color: theme.colors.onSurfaceTertiary, fontSize: theme.fontSize.base },
+  fab: { position: "absolute", right: theme.spacing.xl, bottom: 96, width: 56, height: 56, borderRadius: 28, backgroundColor: theme.colors.brand, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
 });

@@ -43,6 +43,7 @@ export const api = {
   myWaitlist: () => req("/waitlist/mine"),
   leaveWaitlist: (id: string) => req(`/waitlist/${id}`, { method: "DELETE" }),
   adminBookings: (date?: string) => req(`/admin/bookings${date ? `?date=${date}` : ""}`),
+  adminCreateBooking: (body: any) => req("/admin/bookings", { method: "POST", body: JSON.stringify(body) }),
   adminUpdateBooking: (id: string, body: any) => req(`/admin/bookings/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   adminClients: (q?: string) => req(`/admin/clients${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   adminUpdateClient: (id: string, body: any) => req(`/admin/clients/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
