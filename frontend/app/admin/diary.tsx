@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl, Modal } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
@@ -25,12 +25,17 @@ export default function AdminDiary() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [waitlistCount, setWaitlistCount] = useState(0);
+  const [notifs, setNotifs] = useState<any[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [b, w] = await Promise.all([api.adminBookings(date), api.adminWaitlist()]);
+      const [b, w, n] = await Promise.all([api.adminBookings(date), api.adminWaitlist(), api.adminNotifications()]);
       setItems(b);
       setWaitlistCount(w.filter((x: any) => !x.notified).length);
+      setNotifs(n.items || []);
+      setUnread(n.unread || 0);
     } catch {}
     setLoading(false); setRefreshing(false);
   }, [date]);
@@ -56,10 +61,22 @@ export default function AdminDiary() {
   return (
     <SafeAreaView style={styles.container} edges={["top"]} testID="admin-diary">
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.tagline}>PANNELLO ADMIN</Text>
           <Text style={styles.title}>Agenda</Text>
         </View>
+        <Pressable
+          testID="admin-bell-btn"
+          onPress={async () => { setNotifOpen(true); if (unread > 0) { try { await api.markAllNotifRead(); } catch {} setTimeout(load, 300); } }}
+          style={styles.bellBtn}
+        >
+          <Ionicons name="notifications" size={22} color={theme.colors.brand} />
+          {unread > 0 && (
+            <View testID="bell-badge" style={styles.badge}>
+              <Text style={styles.badgeText}>{unread > 99 ? "99+" : unread}</Text>
+            </View>
+          )}
+        </Pressable>
       </View>
 
       <View style={styles.statsRow}>
@@ -141,13 +158,63 @@ export default function AdminDiary() {
           })
         )}
       </ScrollView>
+
+      <Modal visible={notifOpen} transparent animationType="slide" onRequestClose={() => setNotifOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setNotifOpen(false)} />
+        <View style={styles.notifSheet} testID="notif-sheet">
+          <View style={styles.handle} />
+          <View style={styles.notifHeader}>
+            <Text style={styles.notifTitle}>Notifiche</Text>
+            <Pressable testID="notif-close" onPress={() => setNotifOpen(false)}>
+              <Ionicons name="close" size={22} color={theme.colors.onSurface} />
+            </Pressable>
+          </View>
+          <ScrollView>
+            {notifs.length === 0 ? (
+              <View style={styles.notifEmpty}>
+                <Ionicons name="notifications-off-outline" size={40} color={theme.colors.onSurfaceTertiary} />
+                <Text style={{ color: theme.colors.onSurfaceTertiary, marginTop: theme.spacing.sm }}>Nessuna notifica</Text>
+              </View>
+            ) : notifs.map((n) => {
+              const dt = new Date(n.created_at);
+              const meta: any = n.meta || {};
+              return (
+                <View key={n.notif_id} style={styles.notifItem} testID={`notif-${n.notif_id}`}>
+                  <View style={styles.notifIcon}>
+                    <Ionicons name={n.kind === "new_booking" ? "calendar" : "notifications"} size={18} color={theme.colors.brand} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.notifItemTitle}>{n.title}</Text>
+                    <Text style={styles.notifBody}>{n.body}</Text>
+                    <Text style={styles.notifDate}>{dt.toLocaleDateString("it-IT", { day: "numeric", month: "short" })} · {dt.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.surface },
-  header: { padding: theme.spacing.xl, paddingBottom: theme.spacing.md },
+  header: { flexDirection: "row", alignItems: "flex-end", gap: theme.spacing.md, padding: theme.spacing.xl, paddingBottom: theme.spacing.md },
+  bellBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: theme.colors.brandTertiary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.brand, position: "relative" },
+  badge: { position: "absolute", top: -4, right: -4, minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, backgroundColor: theme.colors.brand, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: theme.colors.surface },
+  badgeText: { color: theme.colors.onBrand, fontSize: 10, fontWeight: "700" },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
+  notifSheet: { position: "absolute", bottom: 0, left: 0, right: 0, maxHeight: "80%", backgroundColor: theme.colors.surfaceSecondary, padding: theme.spacing.xl, paddingBottom: theme.spacing.xxxl, borderTopLeftRadius: theme.radius.lg, borderTopRightRadius: theme.radius.lg, borderTopWidth: 1, borderTopColor: theme.colors.borderStrong },
+  handle: { width: 48, height: 4, borderRadius: 2, backgroundColor: theme.colors.border, alignSelf: "center", marginBottom: theme.spacing.md },
+  notifHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: theme.spacing.md },
+  notifTitle: { color: theme.colors.onSurface, fontSize: theme.fontSize.xxl, fontWeight: "500" },
+  notifEmpty: { alignItems: "center", padding: theme.spacing.xxxl },
+  notifItem: { flexDirection: "row", gap: theme.spacing.md, padding: theme.spacing.md, backgroundColor: theme.colors.surface, borderRadius: theme.radius.md, marginBottom: theme.spacing.sm, borderWidth: 1, borderColor: theme.colors.border },
+  notifIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: theme.colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  notifItemTitle: { color: theme.colors.onSurface, fontSize: theme.fontSize.base, fontWeight: "600" },
+  notifBody: { color: theme.colors.onSurfaceSecondary, fontSize: theme.fontSize.sm, marginTop: 2, lineHeight: 18 },
+  notifDate: { color: theme.colors.onSurfaceTertiary, fontSize: 11, marginTop: 4 },
   tagline: { color: theme.colors.brand, letterSpacing: 3, fontSize: 11, fontWeight: "500", marginBottom: 4 },
   title: { color: theme.colors.onSurface, fontSize: theme.fontSize.xxxl, fontWeight: "500" },
   statsRow: { flexDirection: "row", gap: theme.spacing.sm, paddingHorizontal: theme.spacing.xl, marginBottom: theme.spacing.md },

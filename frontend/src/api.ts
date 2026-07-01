@@ -59,4 +59,7 @@ export const api = {
   listTimeOff: () => req("/admin/time-off"),
   createTimeOff: (body: any) => req("/admin/time-off", { method: "POST", body: JSON.stringify(body) }),
   deleteTimeOff: (id: string) => req(`/admin/time-off/${id}`, { method: "DELETE" }),
+  adminNotifications: () => req("/admin/notifications"),
+  markNotifRead: (id: string) => req(`/admin/notifications/${id}/read`, { method: "PATCH" }),
+  markAllNotifRead: () => req("/admin/notifications/mark-all-read", { method: "POST" }),
 };

@@ -60,6 +60,7 @@ bookings_col = db.bookings
 waitlist_col = db.waitlist
 settings_col = db.settings
 timeoff_col = db.time_off
+notifications_col = db.admin_notifications
 
 app = FastAPI(title="Barbershop API")
 api = APIRouter(prefix="/api")
@@ -121,6 +122,18 @@ async def send_email_async(to: str, subject: str, html: str):
         })
     except Exception as e:
         logger.warning(f"Email send failed: {e}")
+
+async def create_admin_notification(kind: str, title: str, body: str, meta: Optional[dict] = None):
+    """Insert an admin-facing notification (in-app bell feed)."""
+    await notifications_col.insert_one({
+        "notif_id": new_id("ntf"),
+        "kind": kind,
+        "title": title,
+        "body": body,
+        "meta": meta or {},
+        "read": False,
+        "created_at": now_utc(),
+    })
 
 def clean_user(u: dict) -> dict:
     return {
@@ -207,6 +220,8 @@ async def startup():
     await bookings_col.create_index([("start_at", 1)])
     await waitlist_col.create_index("waitlist_id", unique=True)
     await timeoff_col.create_index("time_off_id", unique=True)
+    await notifications_col.create_index("notif_id", unique=True)
+    await notifications_col.create_index([("created_at", -1)])
 
     # Seed default weekly schedule if missing
     existing_sched = await settings_col.find_one({"_id": "business_schedule"})
@@ -563,6 +578,14 @@ async def create_booking(data: BookingIn, user=Depends(get_user_from_token)):
     }
     await bookings_col.insert_one(booking)
 
+    # Admin in-app notification
+    asyncio.create_task(create_admin_notification(
+        kind="new_booking",
+        title="Nuova prenotazione",
+        body=f"{user.get('name') or user['email']} ha prenotato {svc['name']} il {start_at.strftime('%d/%m/%Y alle %H:%M')}",
+        meta={"booking_id": booking["booking_id"], "start_at": to_iso(start_at), "service_name": svc["name"], "user_email": user["email"]},
+    ))
+
     # Confirmation email
     asyncio.create_task(send_email_async(
         user["email"],
@@ -735,6 +758,26 @@ async def create_time_off(data: TimeOffIn, user=Depends(require_admin)):
 @api.delete("/admin/time-off/{time_off_id}")
 async def delete_time_off(time_off_id: str, user=Depends(require_admin)):
     await timeoff_col.delete_one({"time_off_id": time_off_id})
+    return {"ok": True}
+
+# ---------------- ADMIN NOTIFICATIONS ----------------
+@api.get("/admin/notifications")
+async def list_notifications(user=Depends(require_admin)):
+    items = await notifications_col.find({}, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
+    for i in items:
+        if isinstance(i.get("created_at"), datetime):
+            i["created_at"] = to_iso(i["created_at"])
+    unread = await notifications_col.count_documents({"read": False})
+    return {"items": items, "unread": unread}
+
+@api.patch("/admin/notifications/{notif_id}/read")
+async def mark_notification_read(notif_id: str, user=Depends(require_admin)):
+    await notifications_col.update_one({"notif_id": notif_id}, {"$set": {"read": True}})
+    return {"ok": True}
+
+@api.post("/admin/notifications/mark-all-read")
+async def mark_all_read(user=Depends(require_admin)):
+    await notifications_col.update_many({"read": False}, {"$set": {"read": True}})
     return {"ok": True}
 
 async def notify_waitlist_for_slot(cancelled_booking: dict):
