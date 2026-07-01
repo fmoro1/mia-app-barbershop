@@ -50,14 +50,12 @@ export default function Home() {
       >
         <View style={styles.hero}>
           <SafeAreaView edges={["top"]} style={{ flex: 1 }}>
+            <Pressable testID="home-share-btn" onPress={shareLink} style={styles.shareFloating}>
+              <Ionicons name="share-social-outline" size={22} color={theme.colors.brand} />
+            </Pressable>
             <View style={styles.heroContent}>
-              <View style={styles.headerRow}>
-                <Image source={require("../../assets/images/logo-white.png")} style={styles.brandLogo} contentFit="contain" />
-                <Pressable testID="home-share-btn" onPress={shareLink} style={styles.iconBtn}>
-                  <Ionicons name="share-social-outline" size={22} color={theme.colors.brand} />
-                </Pressable>
-              </View>
-              <Text style={styles.heroTitle}>Prenota{"\n"}il tuo look</Text>
+              <Image source={require("../../assets/images/logo-white.png")} style={styles.brandLogo} contentFit="contain" />
+              <Text style={styles.heroTitle}>Prenota il tuo look</Text>
             </View>
           </SafeAreaView>
         </View>
@@ -103,14 +101,15 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.surface },
-  hero: { height: 320, backgroundColor: theme.colors.surface, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  heroContent: { flex: 1, padding: theme.spacing.xl, justifyContent: "space-between" },
+  hero: { minHeight: 380, backgroundColor: theme.colors.surface, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  heroContent: { flex: 1, padding: theme.spacing.xl, alignItems: "center", justifyContent: "center", gap: theme.spacing.lg },
+  shareFloating: { position: "absolute", top: theme.spacing.md, right: theme.spacing.xl, width: 44, height: 44, borderRadius: theme.radius.pill, backgroundColor: "rgba(200,155,60,0.15)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.borderStrong, zIndex: 2 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  brandLogo: { width: 220, height: 90 },
+  brandLogo: { width: 300, height: 180 },
   tagline: { color: theme.colors.brand, letterSpacing: 3, fontSize: 11, fontWeight: "500", marginBottom: 6 },
   brandName: { color: theme.colors.onSurface, fontSize: theme.fontSize.xxl, fontWeight: "500" },
   iconBtn: { width: 40, height: 40, borderRadius: theme.radius.pill, backgroundColor: "rgba(200,155,60,0.15)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.borderStrong },
-  heroTitle: { color: theme.colors.onSurface, fontSize: 44, fontWeight: "500", lineHeight: 48 },
+  heroTitle: { color: theme.colors.onSurface, fontSize: 36, fontWeight: "500", lineHeight: 42, textAlign: "center" },
   section: { padding: theme.spacing.xl },
   sectionTitle: { color: theme.colors.onSurface, fontSize: theme.fontSize.xxl, fontWeight: "500", marginBottom: theme.spacing.lg },
   serviceCard: { flexDirection: "row", alignItems: "center", gap: theme.spacing.md, backgroundColor: theme.colors.surfaceSecondary, padding: theme.spacing.lg, borderRadius: theme.radius.lg, marginBottom: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.border },
