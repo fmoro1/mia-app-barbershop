@@ -49,15 +49,10 @@ export default function Home() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.colors.brand} />}
       >
         <View style={styles.hero}>
-          <Image source={{ uri: HERO }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-          <LinearGradient colors={["rgba(15,16,20,0.1)", "rgba(15,16,20,0.9)"]} style={StyleSheet.absoluteFillObject} />
           <SafeAreaView edges={["top"]} style={{ flex: 1 }}>
             <View style={styles.heroContent}>
               <View style={styles.headerRow}>
-                <View>
-                  <Text style={styles.tagline}>BARBERSHOP PREMIUM</Text>
-                  <Text style={styles.brandName}>Barber Shop{"\n"}Francesco Moretti</Text>
-                </View>
+                <Image source={require("../../assets/images/logo-white.png")} style={styles.brandLogo} contentFit="contain" />
                 <Pressable testID="home-share-btn" onPress={shareLink} style={styles.iconBtn}>
                   <Ionicons name="share-social-outline" size={22} color={theme.colors.brand} />
                 </Pressable>
@@ -108,9 +103,10 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.surface },
-  hero: { height: 340, position: "relative" },
+  hero: { height: 320, backgroundColor: theme.colors.surface, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   heroContent: { flex: 1, padding: theme.spacing.xl, justifyContent: "space-between" },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  brandLogo: { width: 220, height: 90 },
   tagline: { color: theme.colors.brand, letterSpacing: 3, fontSize: 11, fontWeight: "500", marginBottom: 6 },
   brandName: { color: theme.colors.onSurface, fontSize: theme.fontSize.xxl, fontWeight: "500" },
   iconBtn: { width: 40, height: 40, borderRadius: theme.radius.pill, backgroundColor: "rgba(200,155,60,0.15)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.borderStrong },

@@ -30,12 +30,9 @@ export default function Index() {
 
   return (
     <View style={styles.container} testID="landing-screen">
-      <Image source={{ uri: HERO }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-      <LinearGradient colors={["rgba(15,16,20,0.2)", "rgba(15,16,20,0.85)", "#0F1014"]} style={StyleSheet.absoluteFillObject} locations={[0, 0.55, 1]} />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.tagline}>BENVENUTO</Text>
-          <Text style={styles.title}>Il tuo{"\n"}Barbershop{"\n"}Premium</Text>
+          <Image source={require("../assets/images/logo-white.png")} style={styles.logo} contentFit="contain" />
           <Text style={styles.subtitle}>Prenota il tuo appuntamento in pochi secondi. Taglio, barba e cura maschile di alta qualità.</Text>
         </View>
 
@@ -74,10 +71,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.surface },
   center: { flex: 1, backgroundColor: theme.colors.surface, alignItems: "center", justifyContent: "center" },
   content: { flexGrow: 1, justifyContent: "space-between", padding: theme.spacing.xl, paddingTop: Platform.OS === "ios" ? 80 : 60, paddingBottom: theme.spacing.xxl },
-  header: { marginTop: theme.spacing.xxl },
+  header: { marginTop: theme.spacing.xxxl, alignItems: "center" },
+  logo: { width: 320, height: 200, marginBottom: theme.spacing.xl },
   tagline: { color: theme.colors.brand, letterSpacing: 4, fontSize: theme.fontSize.sm, marginBottom: theme.spacing.md, fontWeight: "500" },
   title: { color: theme.colors.onSurface, fontSize: 48, lineHeight: 52, fontWeight: "500", marginBottom: theme.spacing.lg },
-  subtitle: { color: theme.colors.onSurfaceSecondary, fontSize: theme.fontSize.lg, lineHeight: 24, maxWidth: 340 },
+  subtitle: { color: theme.colors.onSurfaceSecondary, fontSize: theme.fontSize.lg, lineHeight: 24, maxWidth: 340, textAlign: "center" },
   actions: { gap: theme.spacing.md },
   btnPrimary: { flexDirection: "row", backgroundColor: theme.colors.brand, padding: theme.spacing.lg, borderRadius: theme.radius.md, alignItems: "center", justifyContent: "center", gap: theme.spacing.sm },
   btnPrimaryText: { color: theme.colors.onBrand, fontSize: theme.fontSize.lg, fontWeight: "600" },

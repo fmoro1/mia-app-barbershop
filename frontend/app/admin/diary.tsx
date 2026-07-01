@@ -49,7 +49,8 @@ export default function AdminDiary() {
     return () => clearInterval(t);
   }, [load]));
 
-  const dayDates = Array.from({ length: 14 }, (_, i) => daysAround(i));
+  // Chip scroll: 60 days ahead - the calendar picker handles beyond
+  const dayDates = Array.from({ length: 60 }, (_, i) => daysAround(i));
   const active = items.filter((b) => b.status !== "cancelled");
   const revenueCents = active.reduce((sum, b) => sum + (b.total_cents || 0), 0);
 
@@ -96,6 +97,16 @@ export default function AdminDiary() {
         </View>
       </View>
 
+      <View style={styles.monthBar}>
+        <Text style={styles.monthLabel}>
+          {new Date(date).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).replace(/^\w/, (c) => c.toUpperCase())}
+        </Text>
+        <Pressable testID="date-picker-btn" onPress={() => setDatePickerOpen(true)} style={styles.gotoBtn}>
+          <Ionicons name="calendar-outline" size={16} color={theme.colors.brand} />
+          <Text style={styles.gotoBtnText}>Vai a data</Text>
+        </Pressable>
+      </View>
+
       <View style={styles.dateNavRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateRow}>
           {dayDates.map((d) => {
@@ -114,9 +125,6 @@ export default function AdminDiary() {
             );
           })}
         </ScrollView>
-        <Pressable testID="date-picker-btn" onPress={() => setDatePickerOpen(true)} style={styles.datePickerBtn}>
-          <Ionicons name="calendar-outline" size={20} color={theme.colors.brand} />
-        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: theme.spacing.xl }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.colors.brand} />}>
@@ -260,7 +268,12 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, backgroundColor: theme.colors.surfaceSecondary, padding: theme.spacing.md, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.border },
   statLabel: { color: theme.colors.onSurfaceTertiary, fontSize: theme.fontSize.sm },
   statValue: { color: theme.colors.brand, fontSize: theme.fontSize.xl, fontWeight: "600", marginTop: 2 },
-  dateRow: { paddingHorizontal: theme.spacing.xl, gap: theme.spacing.sm, paddingBottom: theme.spacing.md, height: 76 },
+  dateNavRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: theme.spacing.xl, gap: theme.spacing.sm },
+  monthBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: theme.spacing.xl, paddingBottom: theme.spacing.sm, gap: theme.spacing.md },
+  monthLabel: { color: theme.colors.onSurface, fontSize: theme.fontSize.base, fontWeight: "500", flex: 1 },
+  gotoBtn: { flexDirection: "row", gap: 6, alignItems: "center", paddingHorizontal: theme.spacing.md, paddingVertical: 8, backgroundColor: theme.colors.brandTertiary, borderRadius: theme.radius.pill, borderWidth: 1, borderColor: theme.colors.brand },
+  gotoBtnText: { color: theme.colors.brand, fontWeight: "600", fontSize: theme.fontSize.sm },
+  dateRow: { gap: theme.spacing.sm, paddingBottom: theme.spacing.md, height: 76 },
   dateChip: { width: 56, height: 60, borderRadius: theme.radius.md, backgroundColor: theme.colors.surfaceSecondary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.border, flexShrink: 0 },
   dateChipActive: { backgroundColor: theme.colors.brand, borderColor: theme.colors.brand },
   dateChipDay: { color: theme.colors.onSurfaceTertiary, fontSize: 10, textTransform: "uppercase" },
