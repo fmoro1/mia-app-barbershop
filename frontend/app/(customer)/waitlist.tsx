@@ -6,7 +6,7 @@ import { useFocusEffect } from "expo-router";
 import { api } from "@/src/api";
 import { theme } from "@/src/theme";
 
-type WLItem = { waitlist_id: string; service_name: string; desired_date: string; notified: boolean };
+type WLItem = { waitlist_id: string; service_name: string; desired_date: string; notified: boolean; preferred_slot?: "morning" | "afternoon" | "any" };
 
 export default function Waitlist() {
   const [items, setItems] = useState<WLItem[]>([]);
@@ -45,6 +45,9 @@ export default function Waitlist() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{w.service_name}</Text>
                   <Text style={styles.date}>Data desiderata: {new Date(w.desired_date).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}</Text>
+                  {w.preferred_slot && w.preferred_slot !== "any" && (
+                    <Text style={styles.pref}>Fascia: {w.preferred_slot === "morning" ? "Mattina (9-12:30)" : "Pomeriggio (14-19:30)"}</Text>
+                  )}
                   {w.notified ? (
                     <View style={styles.notifiedBadge}>
                       <Ionicons name="checkmark-circle" size={16} color={theme.colors.success} />
@@ -77,6 +80,7 @@ const styles = StyleSheet.create({
   card: { flexDirection: "row", alignItems: "center", gap: theme.spacing.md, backgroundColor: theme.colors.surfaceSecondary, padding: theme.spacing.lg, borderRadius: theme.radius.lg, marginBottom: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.border },
   name: { color: theme.colors.onSurface, fontSize: theme.fontSize.lg, fontWeight: "500", marginBottom: 4 },
   date: { color: theme.colors.onSurfaceSecondary, fontSize: theme.fontSize.base, marginBottom: theme.spacing.sm },
+  pref: { color: theme.colors.brand, fontSize: theme.fontSize.sm, marginBottom: theme.spacing.sm },
   notifiedBadge: { flexDirection: "row", gap: 6, alignItems: "center", paddingHorizontal: theme.spacing.md, paddingVertical: 4, backgroundColor: "rgba(134,239,172,0.1)", borderRadius: theme.radius.pill, alignSelf: "flex-start" },
   notifiedText: { color: theme.colors.success, fontSize: theme.fontSize.sm, fontWeight: "600" },
   waitingBadge: { flexDirection: "row", gap: 4, alignItems: "center", paddingHorizontal: theme.spacing.md, paddingVertical: 4, backgroundColor: theme.colors.surfaceTertiary, borderRadius: theme.radius.pill, alignSelf: "flex-start" },

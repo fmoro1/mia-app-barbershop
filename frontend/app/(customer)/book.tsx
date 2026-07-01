@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Platform } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Platform, Modal } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -23,6 +23,8 @@ export default function Book() {
   const [loading, setLoading] = useState(false);
   const [reminderHours, setReminderHours] = useState<number>(24);
   const [submitting, setSubmitting] = useState(false);
+  const [waitlistSheet, setWaitlistSheet] = useState(false);
+  const [preferredSlot, setPreferredSlot] = useState<"morning" | "afternoon" | "any">("any");
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
 
@@ -59,11 +61,18 @@ export default function Book() {
     if (!user) { router.push("/login"); return; }
     setSubmitting(true); setErr(""); setOk("");
     try {
-      await api.joinWaitlist({ service_id: params.service_id, desired_date: date });
+      await api.joinWaitlist({ service_id: params.service_id, desired_date: date, preferred_slot: preferredSlot });
       setOk("Aggiunto alla lista d'attesa!");
+      setWaitlistSheet(false);
       setTimeout(() => router.replace("/(customer)/waitlist"), 900);
     } catch (e: any) { setErr(e.message); }
     setSubmitting(false);
+  };
+
+  const openWaitlist = () => {
+    if (!user) { router.push("/login"); return; }
+    setPreferredSlot("any");
+    setWaitlistSheet(true);
   };
 
   const allFull = slots.length > 0 && slots.every((s) => !s.available);
@@ -180,13 +189,13 @@ export default function Book() {
             <View style={[styles.btnPrimary, { backgroundColor: theme.colors.surfaceTertiary }]}>
               <Text style={[styles.btnPrimaryText, { color: theme.colors.onSurfaceTertiary }]}>Salone chiuso</Text>
             </View>
-            <Pressable testID="join-waitlist-btn-closed" disabled={submitting} onPress={joinWaitlist} style={({ pressed }) => [styles.btnSecondary, (pressed || submitting) && { opacity: 0.7 }]}>
+            <Pressable testID="join-waitlist-btn-closed" disabled={submitting} onPress={openWaitlist} style={({ pressed }) => [styles.btnSecondary, (pressed || submitting) && { opacity: 0.7 }]}>
               <Ionicons name="time-outline" size={18} color={theme.colors.brand} />
               <Text style={styles.btnSecondaryText}>Metti in lista d&apos;attesa</Text>
             </Pressable>
           </>
         ) : allFull ? (
-          <Pressable testID="join-waitlist-btn" disabled={submitting} onPress={joinWaitlist} style={({ pressed }) => [styles.btnPrimary, (pressed || submitting) && { opacity: 0.7 }]}>
+          <Pressable testID="join-waitlist-btn" disabled={submitting} onPress={openWaitlist} style={({ pressed }) => [styles.btnPrimary, (pressed || submitting) && { opacity: 0.7 }]}>
             {submitting ? <ActivityIndicator color={theme.colors.onBrand} /> : <><Ionicons name="time" size={18} color={theme.colors.onBrand} /><Text style={styles.btnPrimaryText}>Unisciti alla lista d&apos;attesa</Text></>}
           </Pressable>
         ) : (
@@ -194,13 +203,42 @@ export default function Book() {
             <Pressable testID="confirm-booking-btn" disabled={!selectedSlot || submitting} onPress={confirm} style={({ pressed }) => [styles.btnPrimary, (!selectedSlot || pressed || submitting) && { opacity: 0.6 }]}>
               {submitting ? <ActivityIndicator color={theme.colors.onBrand} /> : <Text style={styles.btnPrimaryText}>Conferma prenotazione</Text>}
             </Pressable>
-            <Pressable testID="join-waitlist-btn-optional" disabled={submitting} onPress={joinWaitlist} style={({ pressed }) => [styles.btnSecondary, (pressed || submitting) && { opacity: 0.7 }]}>
+            <Pressable testID="join-waitlist-btn-optional" disabled={submitting} onPress={openWaitlist} style={({ pressed }) => [styles.btnSecondary, (pressed || submitting) && { opacity: 0.7 }]}>
               <Ionicons name="time-outline" size={16} color={theme.colors.brand} />
               <Text style={styles.btnSecondaryText}>Preferisci un altro orario? Metti in lista d&apos;attesa</Text>
             </Pressable>
           </>
         )}
       </View>
+
+      <Modal visible={waitlistSheet} transparent animationType="slide" onRequestClose={() => setWaitlistSheet(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setWaitlistSheet(false)} />
+        <View style={styles.wlSheet} testID="waitlist-preference-sheet">
+          <View style={styles.wlHandle} />
+          <Text style={styles.wlTitle}>Fascia oraria preferita</Text>
+          <Text style={styles.wlSub}>Ti avviseremo solo se si libera un posto nella fascia che scegli.</Text>
+          {[
+            { key: "morning", label: "Mattina", desc: "9:00 – 12:30", icon: "sunny-outline" as const },
+            { key: "afternoon", label: "Pomeriggio", desc: "14:00 – 19:30", icon: "partly-sunny-outline" as const },
+            { key: "any", label: "Qualsiasi orario", desc: "Anche mattina o pomeriggio", icon: "time-outline" as const },
+          ].map((opt) => {
+            const sel = preferredSlot === opt.key;
+            return (
+              <Pressable key={opt.key} testID={`wl-pref-${opt.key}`} onPress={() => setPreferredSlot(opt.key as any)} style={[styles.wlOpt, sel && styles.wlOptActive]}>
+                <Ionicons name={opt.icon} size={22} color={sel ? theme.colors.brand : theme.colors.onSurfaceSecondary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.wlOptLabel, sel && { color: theme.colors.brand, fontWeight: "600" }]}>{opt.label}</Text>
+                  <Text style={styles.wlOptDesc}>{opt.desc}</Text>
+                </View>
+                {sel && <Ionicons name="checkmark-circle" size={20} color={theme.colors.brand} />}
+              </Pressable>
+            );
+          })}
+          <Pressable testID="wl-confirm" disabled={submitting} onPress={joinWaitlist} style={[styles.btnPrimary, { marginTop: theme.spacing.md }, submitting && { opacity: 0.7 }]}>
+            {submitting ? <ActivityIndicator color={theme.colors.onBrand} /> : <Text style={styles.btnPrimaryText}>Conferma iscrizione</Text>}
+          </Pressable>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -238,4 +276,13 @@ const styles = StyleSheet.create({
   btnSecondaryText: { color: theme.colors.brand, fontSize: theme.fontSize.base, fontWeight: "600" },
   err: { color: theme.colors.error, textAlign: "center" },
   ok: { color: theme.colors.success, textAlign: "center", fontWeight: "600" },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
+  wlSheet: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: theme.colors.surfaceSecondary, padding: theme.spacing.xl, paddingBottom: theme.spacing.xxxl, borderTopLeftRadius: theme.radius.lg, borderTopRightRadius: theme.radius.lg, borderTopWidth: 1, borderTopColor: theme.colors.borderStrong, gap: theme.spacing.sm },
+  wlHandle: { width: 48, height: 4, borderRadius: 2, backgroundColor: theme.colors.border, alignSelf: "center", marginBottom: theme.spacing.md },
+  wlTitle: { color: theme.colors.onSurface, fontSize: theme.fontSize.xxl, fontWeight: "500" },
+  wlSub: { color: theme.colors.onSurfaceSecondary, fontSize: theme.fontSize.base, marginBottom: theme.spacing.md },
+  wlOpt: { flexDirection: "row", alignItems: "center", gap: theme.spacing.md, padding: theme.spacing.md, backgroundColor: theme.colors.surface, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border },
+  wlOptActive: { borderColor: theme.colors.brand, backgroundColor: theme.colors.brandTertiary },
+  wlOptLabel: { color: theme.colors.onSurface, fontSize: theme.fontSize.lg, fontWeight: "500" },
+  wlOptDesc: { color: theme.colors.onSurfaceTertiary, fontSize: theme.fontSize.sm, marginTop: 2 },
 });

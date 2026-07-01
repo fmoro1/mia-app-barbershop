@@ -236,6 +236,7 @@ class BookingUpdate(BaseModel):
 class WaitlistIn(BaseModel):
     service_id: str
     desired_date: str  # YYYY-MM-DD
+    preferred_slot: Literal["morning", "afternoon", "any"] = "any"
     notes: Optional[str] = ""
 
 class ClientAdminUpdate(BaseModel):
@@ -855,6 +856,7 @@ async def join_waitlist(data: WaitlistIn, user=Depends(get_user_from_token)):
         "service_id": data.service_id,
         "service_name": svc["name"],
         "desired_date": data.desired_date,
+        "preferred_slot": data.preferred_slot,
         "notes": data.notes or "",
         "notified": False,
         "created_at": now_utc(),
@@ -967,7 +969,7 @@ async def mark_all_read(user=Depends(require_admin)):
     return {"ok": True}
 
 async def notify_waitlist_for_slot(cancelled_booking: dict):
-    """When a booking is cancelled, notify waitlist users for that date."""
+    """When a booking is cancelled, notify waitlist users for that date whose preferred slot matches."""
     sa = cancelled_booking.get("start_at")
     if not sa:
         return
@@ -976,19 +978,29 @@ async def notify_waitlist_for_slot(cancelled_booking: dict):
             sa = datetime.fromisoformat(sa)
         except Exception:
             return
-    date_str = sa.strftime("%Y-%m-%d")
+    if sa.tzinfo is None:
+        sa = sa.replace(tzinfo=timezone.utc)
+    sa_local = sa.astimezone(TZ)
+    date_str = sa_local.strftime("%Y-%m-%d")
+    hour = sa_local.hour
+    slot_period = "morning" if hour < 13 else "afternoon"
     matches = await waitlist_col.find({
         "desired_date": date_str,
         "service_id": cancelled_booking.get("service_id"),
         "notified": False,
+        "$or": [
+            {"preferred_slot": "any"},
+            {"preferred_slot": slot_period},
+            {"preferred_slot": {"$exists": False}},  # legacy entries
+        ],
     }, {"_id": 0}).to_list(50)
     for w in matches:
         await waitlist_col.update_one({"waitlist_id": w["waitlist_id"]}, {"$set": {"notified": True, "notified_at": now_utc()}})
-        # In-app notification is fetched via GET /waitlist/mine (notified=true)
+        time_hint = sa_local.strftime("%H:%M")
         await send_email_async(
             w["user_email"],
             f"Posto libero il {date_str} - Barbershop",
-            f"<h2>Buone notizie {w.get('user_name','')}!</h2><p>Si è liberato un posto per <b>{w['service_name']}</b> il <b>{date_str}</b>. Apri l'app per prenotare.</p>",
+            f"<h2>Buone notizie {w.get('user_name','')}!</h2><p>Si è liberato un posto per <b>{w['service_name']}</b> il <b>{date_str} alle {time_hint}</b>. Apri l'app per prenotare.</p>",
         )
 
 # ---------------- ADMIN CLIENTS ----------------
