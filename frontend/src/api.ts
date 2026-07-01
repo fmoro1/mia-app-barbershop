@@ -51,4 +51,6 @@ export const api = {
   adminDeleteService: (id: string) => req(`/admin/services/${id}`, { method: "DELETE" }),
   adminWaitlist: () => req("/admin/waitlist"),
   createPaymentIntent: (booking_id: string) => req("/payments/create-intent", { method: "POST", body: JSON.stringify({ booking_id }) }),
+  changePassword: (current_password: string, new_password: string) =>
+    req("/auth/change-password", { method: "POST", body: JSON.stringify({ current_password, new_password }) }),
 };

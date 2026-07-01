@@ -175,6 +175,10 @@ class ClientAdminUpdate(BaseModel):
     must_pay_online: Optional[bool] = None
     blacklisted: Optional[bool] = None
 
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6)
+
 class PayIntentIn(BaseModel):
     booking_id: str
 
@@ -317,6 +321,19 @@ async def google_auth(data: GoogleAuthIn):
 @api.get("/auth/me")
 async def me(user=Depends(get_user_from_token)):
     return clean_user(user)
+
+@api.post("/auth/change-password")
+async def change_password(data: ChangePasswordIn, user=Depends(get_user_from_token)):
+    full = await users_col.find_one({"user_id": user["user_id"]})
+    if not full or not full.get("password_hash"):
+        raise HTTPException(status_code=400, detail="Nessuna password impostata (accesso via Google). Contatta il salone.")
+    if not verify_password(data.current_password, full["password_hash"]):
+        raise HTTPException(status_code=401, detail="Password attuale errata")
+    await users_col.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"password_hash": hash_password(data.new_password)}},
+    )
+    return {"ok": True}
 
 # ---------------- SERVICES ----------------
 @api.get("/services")

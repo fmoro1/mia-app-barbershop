@@ -1,14 +1,16 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable, Share, ScrollView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { useAuth } from "@/src/auth-context";
 import { theme } from "@/src/theme";
+import ChangePasswordModal from "@/src/components/change-password-modal";
 
 export default function AdminProfile() {
   const { user, logout } = useAuth();
   const bookingUrl = process.env.EXPO_PUBLIC_BACKEND_URL || "";
+  const [cpOpen, setCpOpen] = useState(false);
 
   const share = async () => {
     try { await Share.share({ message: `Prenota da Barber Shop Francesco Moretti: ${bookingUrl}`, url: bookingUrl }); } catch {}
@@ -46,6 +48,18 @@ export default function AdminProfile() {
           <Text style={styles.hint}>Incolla questo link nella bio di Instagram / TikTok / WhatsApp. I clienti possono prenotare direttamente dal browser, senza scaricare l'app.</Text>
         </View>
 
+        <Text style={styles.sectionTitle}>SICUREZZA</Text>
+        <Pressable testID="admin-change-password" onPress={() => setCpOpen(true)} style={styles.card}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.md }}>
+            <Ionicons name="key-outline" size={22} color={theme.colors.brand} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: theme.colors.onSurface, fontSize: theme.fontSize.lg, fontWeight: "500" }}>Cambia password</Text>
+              <Text style={{ color: theme.colors.onSurfaceTertiary, fontSize: theme.fontSize.sm, marginTop: 2 }}>Aggiorna la password admin</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.onSurfaceTertiary} />
+          </View>
+        </Pressable>
+
         <Text style={styles.sectionTitle}>INFORMAZIONI SALONE</Text>
         <View style={styles.card}>
           <View style={styles.infoRow}>
@@ -63,6 +77,7 @@ export default function AdminProfile() {
           <Text style={styles.logoutText}>Esci</Text>
         </Pressable>
       </ScrollView>
+      <ChangePasswordModal visible={cpOpen} onClose={() => setCpOpen(false)} />
     </SafeAreaView>
   );
 }

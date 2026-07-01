@@ -7,6 +7,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { storage } from "@/src/utils/storage";
 import { useAuth } from "@/src/auth-context";
 import { theme } from "@/src/theme";
+import ChangePasswordModal from "@/src/components/change-password-modal";
 
 const BIO_KEY = "bshop_biometric_enabled";
 
@@ -15,6 +16,7 @@ export default function Profile() {
   const router = useRouter();
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioEnabled, setBioEnabled] = useState(false);
+  const [cpOpen, setCpOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -86,6 +88,14 @@ export default function Profile() {
               thumbColor="#fff"
             />
           </View>
+          <Pressable testID="change-password-btn" onPress={() => setCpOpen(true)} style={[styles.row, { marginTop: theme.spacing.sm }]}>
+            <Ionicons name="key-outline" size={22} color={theme.colors.brand} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowLabel}>Cambia password</Text>
+              <Text style={styles.rowSub}>Aggiorna la password del tuo account</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.onSurfaceTertiary} />
+          </Pressable>
         </View>
 
         <View style={styles.section}>
@@ -105,6 +115,7 @@ export default function Profile() {
           <Text style={styles.logoutText}>Esci</Text>
         </Pressable>
       </ScrollView>
+      <ChangePasswordModal visible={cpOpen} onClose={() => setCpOpen(false)} />
     </SafeAreaView>
   );
 }
