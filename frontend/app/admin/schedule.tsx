@@ -230,6 +230,7 @@ export default function AdminSchedule() {
               <Calendar
                 testID="to-calendar"
                 markingType="period"
+                firstDay={1}
                 minDate={new Date().toISOString().slice(0, 10)}
                 onDayPress={(d: any) => {
                   if (!newTO.date_from || (newTO.date_from && newTO.date_to)) {

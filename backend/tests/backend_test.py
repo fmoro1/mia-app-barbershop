@@ -262,10 +262,15 @@ def test_blacklist_blocks_login_and_booking(s):
 
 # ===== Payments =====
 def test_payment_intent(s):
-    # Recreate a booking for payment
-    d = (datetime.now(timezone.utc) + timedelta(days=4)).strftime("%Y-%m-%d")
-    av = s.get(f"{API}/availability", params={"date": d, "service_id": state["service_id"]}).json()
-    slot = next(sl for sl in av["slots"] if sl["available"])
+    # Recreate a booking for payment - find first future day with an open slot
+    slot = None
+    for offset in range(4, 14):
+        d = (datetime.now(timezone.utc) + timedelta(days=offset)).strftime("%Y-%m-%d")
+        av = s.get(f"{API}/availability", params={"date": d, "service_id": state["service_id"]}).json()
+        slot = next((sl for sl in av.get("slots", []) if sl.get("available")), None)
+        if slot:
+            break
+    assert slot is not None, "No available slot in next 14 days"
     br = s.post(f"{API}/bookings", json={
         "service_id": state["service_id"], "start_at": slot["start"]
     }, headers=_auth(state["cust_token"]))

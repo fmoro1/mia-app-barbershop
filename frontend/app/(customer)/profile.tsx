@@ -76,8 +76,8 @@ export default function Profile() {
           <Text style={styles.sectionTitle}>SICUREZZA</Text>
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowLabel}>Login biometrico (Face ID / Touch ID)</Text>
-              <Text style={styles.rowSub}>{bioAvailable ? "Disponibile su questo dispositivo" : "Non disponibile"}</Text>
+              <Text style={styles.rowLabel}>Blocca app con Face ID / Touch ID</Text>
+              <Text style={styles.rowSub}>{bioAvailable ? "Chiederà biometria a ogni apertura dell'app" : Platform.OS === "web" ? "Disponibile solo su iOS/Android" : "Non disponibile su questo dispositivo"}</Text>
             </View>
             <Switch
               testID="biometric-switch"

@@ -1,16 +1,29 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Share, ScrollView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
+import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/src/auth-context";
 import { theme } from "@/src/theme";
+import { api } from "@/src/api";
 import ChangePasswordModal from "@/src/components/change-password-modal";
+
+const DAY_NAMES = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
 
 export default function AdminProfile() {
   const { user, logout } = useAuth();
   const bookingUrl = process.env.EXPO_PUBLIC_BACKEND_URL || "";
   const [cpOpen, setCpOpen] = useState(false);
+  const [weekly, setWeekly] = useState<Record<string, [string, string][]>>({});
+
+  const load = useCallback(async () => {
+    try {
+      const s = await api.getSchedule();
+      setWeekly(s.weekly || {});
+    } catch {}
+  }, []);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const share = async () => {
     try { await Share.share({ message: `Prenota da Barber Shop Francesco Moretti: ${bookingUrl}`, url: bookingUrl }); } catch {}
@@ -66,9 +79,23 @@ export default function AdminProfile() {
             <Ionicons name="location-outline" size={20} color={theme.colors.brand} />
             <Text style={styles.infoText}>P.za Giuseppe Mazzini, 18{"\n"}06029 Valfabbrica PG</Text>
           </View>
+          <View style={styles.divider} />
           <View style={styles.infoRow}>
             <Ionicons name="time-outline" size={20} color={theme.colors.brand} />
-            <Text style={styles.infoText}>Aperto 9:00 - 19:00</Text>
+            <View style={{ flex: 1, gap: 2 }}>
+              {DAY_NAMES.map((name, i) => {
+                const wins = weekly[String(i)] || [];
+                const closed = wins.length === 0;
+                return (
+                  <View key={i} style={styles.hourRow}>
+                    <Text style={styles.dayName}>{name}</Text>
+                    <Text style={[styles.dayHours, closed && { color: theme.colors.onSurfaceTertiary }]}>
+                      {closed ? "Chiuso" : wins.map((w) => `${w[0]}-${w[1]}`).join(" · ")}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
           </View>
         </View>
 
@@ -99,6 +126,10 @@ const styles = StyleSheet.create({
   hint: { color: theme.colors.onSurfaceTertiary, fontSize: theme.fontSize.sm, marginTop: theme.spacing.sm, lineHeight: 18 },
   infoRow: { flexDirection: "row", gap: theme.spacing.md, alignItems: "flex-start", paddingVertical: theme.spacing.sm },
   infoText: { color: theme.colors.onSurface, fontSize: theme.fontSize.base, flex: 1, lineHeight: 22 },
+  divider: { height: 1, backgroundColor: theme.colors.border, marginVertical: theme.spacing.xs },
+  hourRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 2 },
+  dayName: { color: theme.colors.onSurface, fontSize: theme.fontSize.base, fontWeight: "500", width: 90 },
+  dayHours: { color: theme.colors.brand, fontSize: theme.fontSize.base, flex: 1, textAlign: "right" },
   logoutBtn: { flexDirection: "row", gap: theme.spacing.sm, padding: theme.spacing.lg, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.danger, alignItems: "center", justifyContent: "center", marginTop: theme.spacing.md },
   logoutText: { color: theme.colors.error, fontSize: theme.fontSize.lg, fontWeight: "500" },
 });

@@ -8,12 +8,15 @@ from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional, Literal
 from datetime import datetime, timedelta, timezone, date, time
+from zoneinfo import ZoneInfo
 from pathlib import Path
 import os
 import uuid
 import logging
 import asyncio
 import httpx
+
+TZ = ZoneInfo("Europe/Rome")
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -32,6 +35,15 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Admin1234!')
 BUSINESS_OPEN_HOUR = int(os.environ.get('BUSINESS_OPEN_HOUR', '9'))
 BUSINESS_CLOSE_HOUR = int(os.environ.get('BUSINESS_CLOSE_HOUR', '19'))
 SLOT_MINUTES = int(os.environ.get('SLOT_MINUTES', '30'))
+
+# Push notifications
+PUSH_BASE_URL = "https://integrations.emergentagent.com"
+PUSH_KEY = os.environ.get('EMERGENT_PUSH_KEY', 'placeholder')
+_push_client = httpx.AsyncClient(
+    base_url=PUSH_BASE_URL,
+    headers={"X-Push-Key": PUSH_KEY},
+    timeout=10.0,
+)
 
 # Optional integrations
 try:
@@ -135,6 +147,37 @@ async def create_admin_notification(kind: str, title: str, body: str, meta: Opti
         "created_at": now_utc(),
     })
 
+async def send_push(recipients: list, data: dict, idempotency_key: Optional[str] = None) -> None:
+    """Send a push notification via Emergent-managed push service."""
+    if not recipients:
+        return
+    if len(recipients) > 100:
+        raise ValueError("max 100 recipients per /trigger call")
+    if "title" not in data or "message" not in data:
+        raise ValueError("data must include title and message")
+    payload: dict = {"recipients": recipients, "data": data}
+    if idempotency_key:
+        payload["$idempotency_key"] = idempotency_key
+    resp = await _push_client.post("/api/v1/push/trigger", json=payload)
+    if resp.status_code == 401:
+        raise RuntimeError("EMERGENT_PUSH_KEY missing or invalid")
+    if resp.status_code >= 500:
+        raise RuntimeError("Push provider unavailable")
+    resp.raise_for_status()
+
+async def notify_admins_push(title: str, message: str, meta: Optional[dict] = None):
+    """Send push to all admin users. Non-blocking."""
+    try:
+        admin_ids = [u["user_id"] async for u in users_col.find({"role": "admin"}, {"_id": 0, "user_id": 1})]
+        if not admin_ids:
+            return
+        data = {"title": title, "message": message}
+        if meta:
+            data.update({k: v for k, v in meta.items() if isinstance(v, (str, int, float, bool))})
+        await send_push(admin_ids, data)
+    except Exception as e:
+        logger.warning(f"Push notification failed (non-blocking): {e}")
+
 def clean_user(u: dict) -> dict:
     return {
         "user_id": u["user_id"],
@@ -193,6 +236,11 @@ class ClientAdminUpdate(BaseModel):
 class ChangePasswordIn(BaseModel):
     current_password: str
     new_password: str = Field(min_length=6)
+
+class RegisterPushBody(BaseModel):
+    user_id: str
+    platform: str
+    device_token: str
 
 # Weekly schedule: keys "0"-"6" (0=Mon, 6=Sun), value = list of [HH:MM, HH:MM] windows.
 class WeeklyScheduleIn(BaseModel):
@@ -367,6 +415,22 @@ async def google_auth(data: GoogleAuthIn):
 async def me(user=Depends(get_user_from_token)):
     return clean_user(user)
 
+@api.post("/register-push", status_code=201)
+async def register_push(body: RegisterPushBody):
+    try:
+        resp = await _push_client.post("/api/v1/push/users/register", json=body.model_dump())
+        if resp.status_code == 401:
+            raise HTTPException(status_code=500, detail="EMERGENT_PUSH_KEY missing or invalid")
+        if resp.status_code >= 500:
+            raise HTTPException(status_code=502, detail="Push provider unavailable")
+        resp.raise_for_status()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"register-push failed: {e}")
+        raise HTTPException(status_code=502, detail="Push registration failed")
+    return {"status": "registered"}
+
 @api.post("/auth/change-password")
 async def change_password(data: ChangePasswordIn, user=Depends(get_user_from_token)):
     full = await users_col.find_one({"user_id": user["user_id"]})
@@ -420,9 +484,11 @@ async def availability(date_str: str = Query(..., alias="date"), service_id: Opt
 
     windows = await get_open_windows_for_date(d)
 
-    # Existing bookings for this day (not cancelled)
-    day_start = datetime.combine(d, time(0, 0), tzinfo=timezone.utc)
-    day_end = day_start + timedelta(days=1)
+    # Existing bookings for this day (not cancelled) - query in Italian TZ range
+    day_start_local = datetime.combine(d, time(0, 0), tzinfo=TZ)
+    day_end_local = day_start_local + timedelta(days=1)
+    day_start = day_start_local.astimezone(timezone.utc)
+    day_end = day_end_local.astimezone(timezone.utc)
     existing = await bookings_col.find({
         "start_at": {"$gte": day_start, "$lt": day_end},
         "status": {"$ne": "cancelled"},
@@ -430,8 +496,8 @@ async def availability(date_str: str = Query(..., alias="date"), service_id: Opt
 
     slots = []
     for w_start, w_end in windows:
-        cursor = datetime.combine(d, w_start, tzinfo=timezone.utc)
-        window_end_dt = datetime.combine(d, w_end, tzinfo=timezone.utc)
+        cursor = datetime.combine(d, w_start, tzinfo=TZ)
+        window_end_dt = datetime.combine(d, w_end, tzinfo=TZ)
         while cursor + timedelta(minutes=duration) <= window_end_dt:
             slot_start = cursor
             slot_end = cursor + timedelta(minutes=duration)
@@ -442,13 +508,14 @@ async def availability(date_str: str = Query(..., alias="date"), service_id: Opt
                     bs = datetime.fromisoformat(bs)
                 if bs.tzinfo is None:
                     bs = bs.replace(tzinfo=timezone.utc)
-                be = bs + timedelta(minutes=int(b.get("duration_minutes", SLOT_MINUTES)))
-                if slot_start < be and slot_end > bs:
+                bs_local = bs.astimezone(TZ)
+                be_local = bs_local + timedelta(minutes=int(b.get("duration_minutes", SLOT_MINUTES)))
+                if slot_start < be_local and slot_end > bs_local:
                     conflict = True
                     break
             slots.append({
-                "start": to_iso(slot_start),
-                "end": to_iso(slot_end),
+                "start": slot_start.isoformat(),
+                "end": slot_end.isoformat(),
                 "available": not conflict,
             })
             cursor += timedelta(minutes=SLOT_MINUTES)
@@ -520,13 +587,18 @@ async def create_booking(data: BookingIn, user=Depends(get_user_from_token)):
 
     start_at = data.start_at
     if start_at.tzinfo is None:
-        start_at = start_at.replace(tzinfo=timezone.utc)
+        # Interpret as Italian local time
+        start_at = start_at.replace(tzinfo=TZ)
+    else:
+        start_at = start_at.astimezone(TZ)
     duration = int(svc["duration_minutes"])
     end_at = start_at + timedelta(minutes=duration)
 
-    # Check conflict
-    day_start = datetime.combine(start_at.date(), time(0, 0), tzinfo=timezone.utc)
-    day_end = day_start + timedelta(days=1)
+    # Check conflict - convert to UTC for MongoDB range query
+    day_start_local = datetime.combine(start_at.date(), time(0, 0), tzinfo=TZ)
+    day_end_local = day_start_local + timedelta(days=1)
+    day_start = day_start_local.astimezone(timezone.utc)
+    day_end = day_end_local.astimezone(timezone.utc)
     same_day = await bookings_col.find({
         "start_at": {"$gte": day_start, "$lt": day_end},
         "status": {"$ne": "cancelled"},
@@ -535,6 +607,7 @@ async def create_booking(data: BookingIn, user=Depends(get_user_from_token)):
         bs = b["start_at"]
         if bs.tzinfo is None:
             bs = bs.replace(tzinfo=timezone.utc)
+        bs = bs.astimezone(TZ)
         be = bs + timedelta(minutes=int(b.get("duration_minutes", SLOT_MINUTES)))
         if start_at < be and end_at > bs:
             raise HTTPException(status_code=409, detail="Orario non disponibile")
@@ -547,8 +620,8 @@ async def create_booking(data: BookingIn, user=Depends(get_user_from_token)):
     windows = await get_open_windows_for_date(start_at.date())
     slot_ok = False
     for w_start, w_end in windows:
-        w_start_dt = datetime.combine(start_at.date(), w_start, tzinfo=timezone.utc)
-        w_end_dt = datetime.combine(start_at.date(), w_end, tzinfo=timezone.utc)
+        w_start_dt = datetime.combine(start_at.date(), w_start, tzinfo=TZ)
+        w_end_dt = datetime.combine(start_at.date(), w_end, tzinfo=TZ)
         if start_at >= w_start_dt and end_at <= w_end_dt:
             slot_ok = True
             break
@@ -579,22 +652,30 @@ async def create_booking(data: BookingIn, user=Depends(get_user_from_token)):
     await bookings_col.insert_one(booking)
 
     # Admin in-app notification
+    start_it = start_at.astimezone(TZ)
     asyncio.create_task(create_admin_notification(
         kind="new_booking",
         title="Nuova prenotazione",
-        body=f"{user.get('name') or user['email']} ha prenotato {svc['name']} il {start_at.strftime('%d/%m/%Y alle %H:%M')}",
-        meta={"booking_id": booking["booking_id"], "start_at": to_iso(start_at), "service_name": svc["name"], "user_email": user["email"]},
+        body=f"{user.get('name') or user['email']} ha prenotato {svc['name']} il {start_it.strftime('%d/%m/%Y alle %H:%M')}",
+        meta={"booking_id": booking["booking_id"], "start_at": start_it.isoformat(), "service_name": svc["name"], "user_email": user["email"]},
+    ))
+
+    # Push notification to admin device(s)
+    asyncio.create_task(notify_admins_push(
+        title="Nuova prenotazione",
+        message=f"{user.get('name') or user['email']} — {svc['name']} il {start_it.strftime('%d/%m alle %H:%M')}",
+        meta={"action_url": "/admin/diary"},
     ))
 
     # Confirmation email
     asyncio.create_task(send_email_async(
         user["email"],
         f"Prenotazione confermata - {svc['name']}",
-        f"<h2>Ciao {user.get('name','')}</h2><p>La tua prenotazione per <b>{svc['name']}</b> è confermata per il <b>{start_at.strftime('%d/%m/%Y alle %H:%M')}</b>.</p>",
+        f"<h2>Ciao {user.get('name','')}</h2><p>La tua prenotazione per <b>{svc['name']}</b> è confermata per il <b>{start_it.strftime('%d/%m/%Y alle %H:%M')}</b>.</p>",
     ))
 
     booking.pop("_id", None)
-    booking["start_at"] = to_iso(start_at)
+    booking["start_at"] = start_at.isoformat()
     return booking
 
 @api.get("/bookings/mine")
@@ -602,7 +683,10 @@ async def my_bookings(user=Depends(get_user_from_token)):
     items = await bookings_col.find({"user_id": user["user_id"]}, {"_id": 0}).sort("start_at", -1).to_list(200)
     for i in items:
         if isinstance(i.get("start_at"), datetime):
-            i["start_at"] = to_iso(i["start_at"])
+            dt = i["start_at"]
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            i["start_at"] = dt.astimezone(TZ).isoformat()
     return items
 
 @api.patch("/bookings/{booking_id}/cancel")
@@ -623,13 +707,16 @@ async def admin_list_bookings(date_str: Optional[str] = Query(None, alias="date"
     query = {}
     if date_str:
         d = parse_date(date_str)
-        day_start = datetime.combine(d, time(0, 0), tzinfo=timezone.utc)
-        day_end = day_start + timedelta(days=1)
-        query["start_at"] = {"$gte": day_start, "$lt": day_end}
+        day_start_local = datetime.combine(d, time(0, 0), tzinfo=TZ)
+        day_end_local = day_start_local + timedelta(days=1)
+        query["start_at"] = {"$gte": day_start_local.astimezone(timezone.utc), "$lt": day_end_local.astimezone(timezone.utc)}
     items = await bookings_col.find(query, {"_id": 0}).sort("start_at", 1).to_list(500)
     for i in items:
         if isinstance(i.get("start_at"), datetime):
-            i["start_at"] = to_iso(i["start_at"])
+            dt = i["start_at"]
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            i["start_at"] = dt.astimezone(TZ).isoformat()
     return items
 
 @api.patch("/admin/bookings/{booking_id}")

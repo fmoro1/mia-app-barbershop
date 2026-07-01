@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Refre
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
+import { Calendar } from "react-native-calendars";
 import { api } from "@/src/api";
 import { theme, formatCents, formatDuration } from "@/src/theme";
 
@@ -28,6 +29,7 @@ export default function AdminDiary() {
   const [notifs, setNotifs] = useState<any[]>([]);
   const [unread, setUnread] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -94,23 +96,28 @@ export default function AdminDiary() {
         </View>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateRow}>
-        {dayDates.map((d) => {
-          const dt = new Date(d);
-          const selected = d === date;
-          return (
-            <Pressable
-              key={d}
-              testID={`date-chip-${d}`}
-              onPress={() => setDate(d)}
-              style={[styles.dateChip, selected && styles.dateChipActive]}
-            >
-              <Text style={[styles.dateChipDay, selected && styles.dateChipDayActive]}>{dt.toLocaleDateString("it-IT", { weekday: "short" })}</Text>
-              <Text style={[styles.dateChipNum, selected && styles.dateChipNumActive]}>{dt.getDate()}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.dateNavRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateRow}>
+          {dayDates.map((d) => {
+            const dt = new Date(d);
+            const selected = d === date;
+            return (
+              <Pressable
+                key={d}
+                testID={`date-chip-${d}`}
+                onPress={() => setDate(d)}
+                style={[styles.dateChip, selected && styles.dateChipActive]}
+              >
+                <Text style={[styles.dateChipDay, selected && styles.dateChipDayActive]}>{dt.toLocaleDateString("it-IT", { weekday: "short" })}</Text>
+                <Text style={[styles.dateChipNum, selected && styles.dateChipNumActive]}>{dt.getDate()}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        <Pressable testID="date-picker-btn" onPress={() => setDatePickerOpen(true)} style={styles.datePickerBtn}>
+          <Ionicons name="calendar-outline" size={20} color={theme.colors.brand} />
+        </Pressable>
+      </View>
 
       <ScrollView contentContainerStyle={{ padding: theme.spacing.xl }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.colors.brand} />}>
         {loading ? (
@@ -158,6 +165,38 @@ export default function AdminDiary() {
           })
         )}
       </ScrollView>
+
+      <Modal visible={datePickerOpen} transparent animationType="slide" onRequestClose={() => setDatePickerOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setDatePickerOpen(false)} />
+        <View style={styles.notifSheet}>
+          <View style={styles.handle} />
+          <View style={styles.notifHeader}>
+            <Text style={styles.notifTitle}>Vai a data</Text>
+            <Pressable testID="date-picker-close" onPress={() => setDatePickerOpen(false)}>
+              <Ionicons name="close" size={22} color={theme.colors.onSurface} />
+            </Pressable>
+          </View>
+          <Calendar
+            testID="admin-date-picker"
+            firstDay={1}
+            current={date}
+            onDayPress={(d: any) => { setDate(d.dateString); setDatePickerOpen(false); }}
+            markedDates={{ [date]: { selected: true, selectedColor: theme.colors.brand } }}
+            theme={{
+              backgroundColor: theme.colors.surfaceSecondary,
+              calendarBackground: theme.colors.surfaceSecondary,
+              dayTextColor: theme.colors.onSurface,
+              monthTextColor: theme.colors.onSurface,
+              textDisabledColor: theme.colors.onSurfaceTertiary,
+              arrowColor: theme.colors.brand,
+              todayTextColor: theme.colors.brand,
+              selectedDayBackgroundColor: theme.colors.brand,
+              selectedDayTextColor: theme.colors.onBrand,
+              textSectionTitleColor: theme.colors.onSurfaceTertiary,
+            }}
+          />
+        </View>
+      </Modal>
 
       <Modal visible={notifOpen} transparent animationType="slide" onRequestClose={() => setNotifOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setNotifOpen(false)} />

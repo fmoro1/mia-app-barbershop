@@ -90,6 +90,7 @@ export default function Book() {
               testID="book-calendar"
               current={date}
               minDate={today}
+              firstDay={1}
               onDayPress={(d: DateData) => setDate(d.dateString)}
               markedDates={{ [date]: { selected: true, selectedColor: theme.colors.brand } }}
               theme={{
@@ -128,7 +129,7 @@ export default function Book() {
               )}
               <View style={styles.slotsGrid}>
                 {slots.map((s) => {
-                  const label = new Date(s.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+                  const label = new Date(s.start).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Rome" });
                   const selected = selectedSlot === s.start;
                   return (
                     <Pressable
@@ -175,17 +176,29 @@ export default function Book() {
         {err ? <Text style={styles.err}>{err}</Text> : null}
         {ok ? <Text style={styles.ok}>{ok}</Text> : null}
         {isClosed ? (
-          <View style={[styles.btnPrimary, { backgroundColor: theme.colors.surfaceTertiary }]}>
-            <Text style={[styles.btnPrimaryText, { color: theme.colors.onSurfaceTertiary }]}>Salone chiuso</Text>
-          </View>
+          <>
+            <View style={[styles.btnPrimary, { backgroundColor: theme.colors.surfaceTertiary }]}>
+              <Text style={[styles.btnPrimaryText, { color: theme.colors.onSurfaceTertiary }]}>Salone chiuso</Text>
+            </View>
+            <Pressable testID="join-waitlist-btn-closed" disabled={submitting} onPress={joinWaitlist} style={({ pressed }) => [styles.btnSecondary, (pressed || submitting) && { opacity: 0.7 }]}>
+              <Ionicons name="time-outline" size={18} color={theme.colors.brand} />
+              <Text style={styles.btnSecondaryText}>Metti in lista d&apos;attesa</Text>
+            </Pressable>
+          </>
         ) : allFull ? (
           <Pressable testID="join-waitlist-btn" disabled={submitting} onPress={joinWaitlist} style={({ pressed }) => [styles.btnPrimary, (pressed || submitting) && { opacity: 0.7 }]}>
-            {submitting ? <ActivityIndicator color={theme.colors.onBrand} /> : <><Ionicons name="time" size={18} color={theme.colors.onBrand} /><Text style={styles.btnPrimaryText}>Unisciti alla lista d'attesa</Text></>}
+            {submitting ? <ActivityIndicator color={theme.colors.onBrand} /> : <><Ionicons name="time" size={18} color={theme.colors.onBrand} /><Text style={styles.btnPrimaryText}>Unisciti alla lista d&apos;attesa</Text></>}
           </Pressable>
         ) : (
-          <Pressable testID="confirm-booking-btn" disabled={!selectedSlot || submitting} onPress={confirm} style={({ pressed }) => [styles.btnPrimary, (!selectedSlot || pressed || submitting) && { opacity: 0.6 }]}>
-            {submitting ? <ActivityIndicator color={theme.colors.onBrand} /> : <Text style={styles.btnPrimaryText}>Conferma prenotazione</Text>}
-          </Pressable>
+          <>
+            <Pressable testID="confirm-booking-btn" disabled={!selectedSlot || submitting} onPress={confirm} style={({ pressed }) => [styles.btnPrimary, (!selectedSlot || pressed || submitting) && { opacity: 0.6 }]}>
+              {submitting ? <ActivityIndicator color={theme.colors.onBrand} /> : <Text style={styles.btnPrimaryText}>Conferma prenotazione</Text>}
+            </Pressable>
+            <Pressable testID="join-waitlist-btn-optional" disabled={submitting} onPress={joinWaitlist} style={({ pressed }) => [styles.btnSecondary, (pressed || submitting) && { opacity: 0.7 }]}>
+              <Ionicons name="time-outline" size={16} color={theme.colors.brand} />
+              <Text style={styles.btnSecondaryText}>Preferisci un altro orario? Metti in lista d&apos;attesa</Text>
+            </Pressable>
+          </>
         )}
       </View>
     </SafeAreaView>
@@ -221,6 +234,8 @@ const styles = StyleSheet.create({
   footer: { position: "absolute", left: 0, right: 0, bottom: 0, padding: theme.spacing.xl, paddingBottom: Platform.OS === "ios" ? 40 : theme.spacing.xl, backgroundColor: theme.colors.surface, borderTopWidth: 1, borderTopColor: theme.colors.border, gap: theme.spacing.sm },
   btnPrimary: { flexDirection: "row", gap: theme.spacing.sm, backgroundColor: theme.colors.brand, padding: theme.spacing.lg, borderRadius: theme.radius.md, alignItems: "center", justifyContent: "center" },
   btnPrimaryText: { color: theme.colors.onBrand, fontSize: theme.fontSize.lg, fontWeight: "600" },
+  btnSecondary: { flexDirection: "row", gap: theme.spacing.sm, backgroundColor: theme.colors.brandTertiary, padding: theme.spacing.md, borderRadius: theme.radius.md, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.brand },
+  btnSecondaryText: { color: theme.colors.brand, fontSize: theme.fontSize.base, fontWeight: "600" },
   err: { color: theme.colors.error, textAlign: "center" },
   ok: { color: theme.colors.success, textAlign: "center", fontWeight: "600" },
 });
