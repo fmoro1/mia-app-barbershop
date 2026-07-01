@@ -1,0 +1,157 @@
+{
+  "app_name": "Premium Barber Booking & Admin",
+  "personality": "6 Glass / Luxe DARK with 3 Editorial Typography",
+  "personality_one_liner": "Cinematic, high-end barbershop experience blending dark wood aesthetics with warm gold accents and elegant editorial typography.",
+  "color": {
+    "surface": "#0F1014",
+    "onSurface": "#F5F5F0",
+    "surfaceSecondary": "#1A1B20",
+    "onSurfaceSecondary": "#D4D4D8",
+    "surfaceTertiary": "#27282D",
+    "onSurfaceTertiary": "#A1A1AA",
+    "surfaceInverse": "#F5F5F0",
+    "onSurfaceInverse": "#0F1014",
+    "brand": "#C89B3C",
+    "brandPrimary": "#C89B3C",
+    "onBrandPrimary": "#0F1014",
+    "brandSecondary": "#8C6A21",
+    "onBrandSecondary": "#F5F5F0",
+    "brandTertiary": "rgba(200, 155, 60, 0.12)",
+    "onBrandTertiary": "#C89B3C",
+    "success": "#2E4D3B",
+    "onSuccess": "#86EFAC",
+    "warning": "#5C3E14",
+    "onWarning": "#FCD34D",
+    "error": "#4A1A1A",
+    "onError": "#FCA5A5",
+    "info": "#1E3A5F",
+    "onInfo": "#93C5FD",
+    "border": "#27282D",
+    "borderStrong": "#3F4046",
+    "divider": "#1A1B20"
+  },
+  "typography": {
+    "displayFontFamily": "Cormorant Garamond",
+    "textFontFamily": "Satoshi",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use cinematic padding (xl/2xl) at screen roots. Ensure scrolling content does not hide behind sticky CTAs by using equivalent bottom padding. Keep empty spaces intentional.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 4,
+    "md": 8,
+    "lg": 16,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use glass for sticky headers, bottom tabs, bottom sheets, and the background of sticky bottom CTAs.",
+      "Pair blur with a translucent tinted base (>= 75% surface) underneath to guarantee foreground readability.",
+      "Apply glass on featured cards paired with imagery underneath."
+    ],
+    "dont's": [
+      "Never apply glass to form fields or body text regions.",
+      "Do not use generic blue/purple tints in the glass overlay."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "CustomerHome",
+      "purpose": "A premium discovery and booking interface allowing clients to view services (taglio uomo, barba) and initiate a booking.",
+      "states": {
+        "loading": "Centered sophisticated spinner with a dark gold accent.",
+        "empty": "Stylized barber tools illustration indicating 'No services available currently.'",
+        "error": "Elegant error message 'Unable to load services' with a subtle 'Retry' CTA."
+      },
+      "layout": "Hero image of a high-end barbershop (dark wood, warm lighting) with a gradient-to-dark scrim (top->bottom, transparent to 80% surfaceInverse). Below hero: 'Our Services' listed as rows (tinted icon container + title + chevron) with generous md/lg padding. A sticky 'Book Appointment' CTA at the bottom using a glass container."
+    },
+    {
+      "name": "CustomerWaitlist",
+      "purpose": "Enables users to join a waitlist for fully-booked days and receive notifications upon cancellation.",
+      "states": {
+        "loading": "Calendar skeleton loading.",
+        "empty": "No waitlists joined yet.",
+        "error": "Error loading calendar availability."
+      },
+      "layout": "Date picker calendar. If a date is fully booked, show a 'Capacity Full' badge. Display a prominent 'Join Waitlist' CTA in the bottom thumb zone. Include a toggle for SMS/Push notifications. Minimal form if required."
+    },
+    {
+      "name": "AdminDashboard",
+      "purpose": "Treatwell-style central diary and command center for barbershop staff to manage bookings, waitlists, and revenue.",
+      "states": {
+        "loading": "Timeline view skeleton.",
+        "empty": "Clear schedule message: 'No appointments today. Enjoy the calm.'",
+        "error": "Failed to sync diary."
+      },
+      "layout": "Centralized Diary/Timeline calendar block showing today's appointments. Quick action FAB (glass) to 'Block Time' or 'New Booking'. Top summary cards for 'Today's Revenue' and 'Waitlist queue'. Use edge-to-edge structural grids without heavy shadows."
+    },
+    {
+      "name": "AdminClientManagement",
+      "purpose": "Client database where admins can enforce online payments or blacklist problematic users.",
+      "states": {
+        "loading": "Client list skeleton.",
+        "empty": "No clients found. Search to begin.",
+        "error": "Could not retrieve client directory."
+      },
+      "layout": "Search bar at the top. List view of clients. Tapping a client opens a bottom sheet (glass header) with segmented controls or toggles for 'Require Stripe Payment' and 'Blacklist Client'. Action buttons use brandPrimary for high visibility."
+    }
+  ],
+  "images": {
+    "hero_barbershop": {
+      "url": "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2OTV8MHwxfHNlYXJjaHwxfHxoaWdoJTIwZW5kJTIwYmFyYmVyc2hvcCUyMGludGVyaW9yJTIwZGFyayUyMHdvb2QlMjB3YXJtJTIwbGlnaHRpbmd8ZW58MHx8fHwxNzgyOTMzMDY4fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "High-end barbershop interior with dark leather chairs and warm brick walls"
+    },
+    "hero_barbershop_dark": {
+      "url": "https://images.unsplash.com/photo-1536520002442-39764a41e987?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2OTV8MHwxfHNlYXJjaHwyfHxoaWdoJTIwZW5kJTIwYmFyYmVyc2hvcCUyMGludGVyaW9yJTIwZGFyayUyMHdvb2QlMjB3YXJtJTIwbGlnaHRpbmd8ZW58MHx8fHwxNzgyOTMzMDY4fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Moody salon interior with lighted pendant lamps"
+    },
+    "empty_tools": {
+      "url": "https://images.unsplash.com/photo-1638383257653-4217e9161b11?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTB8MHwxfHNlYXJjaHwyfHxiYXJiZXIlMjB0b29scyUyMGNvbWIlMjBzY2lzc29ycyUyMGNsb3NlJTIwdXAlMjBkYXJrJTIwYWVzdGhldGljfGVufDB8fHx8MTc4MjkzMzA2OHww&ixlib=rb-4.1.0&q=85",
+      "alt": "Dark aesthetic close up of barber tools in a black case"
+    },
+    "logo_barbershop": {
+      "url": "https://images.pexels.com/photos/17132124/pexels-photo-17132124.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Vintage barbershop logo design on glass window"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the color palette: Avoid ANY blues, purples, or generic AI pastel colors. The theme is an ultra-premium, dark wood, masculine aesthetic featuring deep obsidian (0F1014) and aged gold (C89B3C).",
+    "Use 'Cormorant Garamond' for display titles and 'Satoshi' for body text. Ensure max font weight is 500 across the app to maintain the premium editorial feel.",
+    "Implement the 'gradient scrim' pattern for any text over images (e.g., the Home screen hero image): A linear gradient from transparent down to >=80% surfaceInverse opacity must sit between the image and text.",
+    "Admin Dashboard layout must be optimized for dense operational use but maintain the Luxe Dark aesthetic. Use edge-to-edge layouts for the diary and subtle dividers instead of heavy card shadows.",
+    "For the Waitlist flow, ensure a prominent 'Capacity Full' badge is visible when dates are taken, paired with a sticky glass-backed CTA to 'Join Waitlist'.",
+    "For Client Management, the 'Force Online Payment' and 'Blacklist' functionalities should be easily accessible via toggles inside a glass-header bottom sheet.",
+    "Public shareable link functionality: The app must support Expo Router Deep Linking so the booking flow can be launched via an Instagram bio link. Treat the web target as a primary citizen.",
+    "Ensure sticky bottom buttons have safe-area padding at the bottom and use a glass container background over scrolling content."
+  ]
+}
