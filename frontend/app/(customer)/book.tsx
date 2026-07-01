@@ -32,6 +32,7 @@ export default function Book() {
     try {
       const res = await api.availability(date, params.service_id);
       setSlots(res.slots || []);
+      setAvailData(res);
     } catch (e: any) { setErr(e.message); }
     setLoading(false);
   }, [date, params.service_id]);
@@ -66,6 +67,8 @@ export default function Book() {
   };
 
   const allFull = slots.length > 0 && slots.every((s) => !s.available);
+  const [availData, setAvailData] = useState<any>(null);
+  const isClosed = availData?.closed;
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -111,10 +114,16 @@ export default function Book() {
             <ActivityIndicator color={theme.colors.brand} style={{ marginVertical: theme.spacing.xl }} />
           ) : (
             <>
-              {allFull && (
+              {isClosed && (
+                <View testID="closed-banner" style={styles.closedBanner}>
+                  <Ionicons name="lock-closed" size={20} color={theme.colors.onSurfaceTertiary} />
+                  <Text style={styles.closedText}>Salone chiuso in questa data. Scegli un altro giorno.</Text>
+                </View>
+              )}
+              {allFull && !isClosed && (
                 <View testID="all-full-badge" style={styles.fullBanner}>
                   <Ionicons name="alert-circle" size={20} color={theme.colors.warning} />
-                  <Text style={styles.fullText}>Tutto pieno. Puoi metterti in lista d'attesa.</Text>
+                  <Text style={styles.fullText}>Tutto pieno. Puoi metterti in lista d&apos;attesa.</Text>
                 </View>
               )}
               <View style={styles.slotsGrid}>
@@ -165,7 +174,11 @@ export default function Book() {
       <View style={styles.footer}>
         {err ? <Text style={styles.err}>{err}</Text> : null}
         {ok ? <Text style={styles.ok}>{ok}</Text> : null}
-        {allFull ? (
+        {isClosed ? (
+          <View style={[styles.btnPrimary, { backgroundColor: theme.colors.surfaceTertiary }]}>
+            <Text style={[styles.btnPrimaryText, { color: theme.colors.onSurfaceTertiary }]}>Salone chiuso</Text>
+          </View>
+        ) : allFull ? (
           <Pressable testID="join-waitlist-btn" disabled={submitting} onPress={joinWaitlist} style={({ pressed }) => [styles.btnPrimary, (pressed || submitting) && { opacity: 0.7 }]}>
             {submitting ? <ActivityIndicator color={theme.colors.onBrand} /> : <><Ionicons name="time" size={18} color={theme.colors.onBrand} /><Text style={styles.btnPrimaryText}>Unisciti alla lista d'attesa</Text></>}
           </Pressable>
@@ -197,6 +210,8 @@ const styles = StyleSheet.create({
   slotTextSelected: { color: theme.colors.onBrand, fontWeight: "600" },
   fullBanner: { flexDirection: "row", gap: theme.spacing.sm, alignItems: "center", padding: theme.spacing.md, backgroundColor: "rgba(252,211,77,0.1)", borderRadius: theme.radius.md, marginBottom: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.warning },
   fullText: { color: theme.colors.warning, flex: 1 },
+  closedBanner: { flexDirection: "row", gap: theme.spacing.sm, alignItems: "center", padding: theme.spacing.md, backgroundColor: theme.colors.surfaceTertiary, borderRadius: theme.radius.md, marginBottom: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.border },
+  closedText: { color: theme.colors.onSurfaceSecondary, flex: 1 },
   reminderSub: { color: theme.colors.onSurfaceSecondary, marginBottom: theme.spacing.md },
   reminderRow: { flexDirection: "row", gap: theme.spacing.sm, flexWrap: "wrap" },
   reminderChip: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md, borderRadius: theme.radius.pill, borderWidth: 1, borderColor: theme.colors.borderStrong, backgroundColor: theme.colors.surfaceSecondary },

@@ -31,6 +31,7 @@ export default function AdminLayout() {
       <Tabs.Screen name="diary" options={{ title: "Agenda", tabBarIcon: ({ color, size }) => <Ionicons name="calendar" color={color} size={size} /> }} />
       <Tabs.Screen name="clients" options={{ title: "Clienti", tabBarIcon: ({ color, size }) => <Ionicons name="people" color={color} size={size} /> }} />
       <Tabs.Screen name="services" options={{ title: "Servizi", tabBarIcon: ({ color, size }) => <Ionicons name="cut" color={color} size={size} /> }} />
+      <Tabs.Screen name="schedule" options={{ title: "Orari", tabBarIcon: ({ color, size }) => <Ionicons name="time" color={color} size={size} /> }} />
       <Tabs.Screen name="profile" options={{ title: "Profilo", tabBarIcon: ({ color, size }) => <Ionicons name="person" color={color} size={size} /> }} />
     </Tabs>
   );

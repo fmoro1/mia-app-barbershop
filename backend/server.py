@@ -58,6 +58,8 @@ sessions_col = db.user_sessions
 services_col = db.services
 bookings_col = db.bookings
 waitlist_col = db.waitlist
+settings_col = db.settings
+timeoff_col = db.time_off
 
 app = FastAPI(title="Barbershop API")
 api = APIRouter(prefix="/api")
@@ -179,6 +181,18 @@ class ChangePasswordIn(BaseModel):
     current_password: str
     new_password: str = Field(min_length=6)
 
+# Weekly schedule: keys "0"-"6" (0=Mon, 6=Sun), value = list of [HH:MM, HH:MM] windows.
+class WeeklyScheduleIn(BaseModel):
+    weekly: dict  # {"0": [["09:00","12:30"],["14:00","19:30"]], ...}
+
+class TimeOffIn(BaseModel):
+    date_from: str  # YYYY-MM-DD
+    date_to: str    # YYYY-MM-DD inclusive
+    type: Literal["closed", "open"] = "closed"
+    time_from: Optional[str] = None  # "HH:MM"; null = whole day
+    time_to: Optional[str] = None
+    reason: Optional[str] = ""
+
 class PayIntentIn(BaseModel):
     booking_id: str
 
@@ -192,6 +206,22 @@ async def startup():
     await bookings_col.create_index("booking_id", unique=True)
     await bookings_col.create_index([("start_at", 1)])
     await waitlist_col.create_index("waitlist_id", unique=True)
+    await timeoff_col.create_index("time_off_id", unique=True)
+
+    # Seed default weekly schedule if missing
+    existing_sched = await settings_col.find_one({"_id": "business_schedule"})
+    if not existing_sched:
+        default_weekly = {
+            "0": [],  # Monday - closed
+            "1": [["09:00", "12:30"], ["14:00", "19:30"]],  # Tuesday
+            "2": [["09:00", "12:30"], ["14:00", "19:30"]],  # Wednesday
+            "3": [["09:00", "12:30"], ["14:00", "19:30"]],  # Thursday
+            "4": [["09:00", "12:30"], ["14:00", "19:30"]],  # Friday
+            "5": [["09:00", "12:30"], ["14:00", "19:30"]],  # Saturday
+            "6": [],  # Sunday - closed
+        }
+        await settings_col.insert_one({"_id": "business_schedule", "weekly": default_weekly})
+        logger.info("Seeded default weekly schedule")
 
     # Seed admin
     existing = await users_col.find_one({"email": ADMIN_EMAIL.lower()})
@@ -365,13 +395,15 @@ def parse_date(s: str) -> date:
 
 @api.get("/availability")
 async def availability(date_str: str = Query(..., alias="date"), service_id: Optional[str] = None):
-    """Return list of slots for a given date. Each slot: {start, end, available}."""
+    """Return list of slots for a given date, computed from weekly schedule + time_off overrides."""
     d = parse_date(date_str)
     duration = SLOT_MINUTES
     if service_id:
         svc = await services_col.find_one({"service_id": service_id}, {"_id": 0})
         if svc:
             duration = int(svc.get("duration_minutes", SLOT_MINUTES))
+
+    windows = await get_open_windows_for_date(d)
 
     # Existing bookings for this day (not cancelled)
     day_start = datetime.combine(d, time(0, 0), tzinfo=timezone.utc)
@@ -382,31 +414,85 @@ async def availability(date_str: str = Query(..., alias="date"), service_id: Opt
     }, {"_id": 0}).to_list(500)
 
     slots = []
-    open_dt = datetime.combine(d, time(BUSINESS_OPEN_HOUR, 0), tzinfo=timezone.utc)
-    close_dt = datetime.combine(d, time(BUSINESS_CLOSE_HOUR, 0), tzinfo=timezone.utc)
-    cursor = open_dt
-    while cursor + timedelta(minutes=duration) <= close_dt:
-        slot_start = cursor
-        slot_end = cursor + timedelta(minutes=duration)
-        conflict = False
-        for b in existing:
-            bs = b["start_at"]
-            if isinstance(bs, str):
-                bs = datetime.fromisoformat(bs)
-            if bs.tzinfo is None:
-                bs = bs.replace(tzinfo=timezone.utc)
-            be = bs + timedelta(minutes=int(b.get("duration_minutes", SLOT_MINUTES)))
-            if slot_start < be and slot_end > bs:
-                conflict = True
-                break
-        slots.append({
-            "start": to_iso(slot_start),
-            "end": to_iso(slot_end),
-            "available": not conflict,
-        })
-        cursor += timedelta(minutes=SLOT_MINUTES)
-    all_full = all(not s["available"] for s in slots) if slots else True
-    return {"date": date_str, "slots": slots, "all_full": all_full}
+    for w_start, w_end in windows:
+        cursor = datetime.combine(d, w_start, tzinfo=timezone.utc)
+        window_end_dt = datetime.combine(d, w_end, tzinfo=timezone.utc)
+        while cursor + timedelta(minutes=duration) <= window_end_dt:
+            slot_start = cursor
+            slot_end = cursor + timedelta(minutes=duration)
+            conflict = False
+            for b in existing:
+                bs = b["start_at"]
+                if isinstance(bs, str):
+                    bs = datetime.fromisoformat(bs)
+                if bs.tzinfo is None:
+                    bs = bs.replace(tzinfo=timezone.utc)
+                be = bs + timedelta(minutes=int(b.get("duration_minutes", SLOT_MINUTES)))
+                if slot_start < be and slot_end > bs:
+                    conflict = True
+                    break
+            slots.append({
+                "start": to_iso(slot_start),
+                "end": to_iso(slot_end),
+                "available": not conflict,
+            })
+            cursor += timedelta(minutes=SLOT_MINUTES)
+
+    closed_all_day = len(windows) == 0
+    all_full = closed_all_day or (bool(slots) and all(not s["available"] for s in slots))
+    return {"date": date_str, "slots": slots, "all_full": all_full, "closed": closed_all_day}
+
+
+def _parse_hhmm(s: str) -> time:
+    h, m = s.split(":")
+    return time(int(h), int(m))
+async def get_open_windows_for_date(d: date):
+    """Return list of (time_start, time_end) open windows for the given date, applying overrides."""
+    # Python weekday: 0=Mon .. 6=Sun (matches our storage keys)
+    dow = str(d.weekday())
+    sched = await settings_col.find_one({"_id": "business_schedule"})
+    weekly = (sched or {}).get("weekly", {})
+    day_windows = weekly.get(dow, [])
+    # Convert to time tuples
+    windows = [(_parse_hhmm(a), _parse_hhmm(b)) for a, b in day_windows]
+
+    # Apply time_off overrides for this exact date range
+    date_iso = d.strftime("%Y-%m-%d")
+    overrides = await timeoff_col.find({
+        "date_from": {"$lte": date_iso},
+        "date_to": {"$gte": date_iso},
+    }, {"_id": 0}).to_list(200)
+
+    for o in overrides:
+        t_from = _parse_hhmm(o["time_from"]) if o.get("time_from") else time(0, 0)
+        t_to = _parse_hhmm(o["time_to"]) if o.get("time_to") else time(23, 59)
+        if o.get("type") == "open":
+            # Add this window (merge later)
+            windows.append((t_from, t_to))
+        else:
+            # closed: subtract this range from all windows
+            new_wins = []
+            for w_start, w_end in windows:
+                # If no overlap → keep as-is
+                if t_to <= w_start or t_from >= w_end:
+                    new_wins.append((w_start, w_end))
+                    continue
+                # Overlap: split
+                if t_from > w_start:
+                    new_wins.append((w_start, t_from))
+                if t_to < w_end:
+                    new_wins.append((t_to, w_end))
+            windows = new_wins
+
+    # Merge overlapping / adjacent windows
+    windows.sort()
+    merged = []
+    for w in windows:
+        if merged and w[0] <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], w[1]))
+        else:
+            merged.append(w)
+    return merged
 
 # ---------------- BOOKINGS ----------------
 @api.post("/bookings")
@@ -441,6 +527,18 @@ async def create_booking(data: BookingIn, user=Depends(get_user_from_token)):
     total = int(svc["price_cents"])
     must_online = bool(user.get("must_pay_online")) or int(svc.get("deposit_percent", 0)) > 0
     deposit = int(total * int(svc.get("deposit_percent", 0)) / 100)
+
+    # Verify slot is within an open window for that date
+    windows = await get_open_windows_for_date(start_at.date())
+    slot_ok = False
+    for w_start, w_end in windows:
+        w_start_dt = datetime.combine(start_at.date(), w_start, tzinfo=timezone.utc)
+        w_end_dt = datetime.combine(start_at.date(), w_end, tzinfo=timezone.utc)
+        if start_at >= w_start_dt and end_at <= w_end_dt:
+            slot_ok = True
+            break
+    if not slot_ok:
+        raise HTTPException(status_code=400, detail="Orario fuori dall'apertura del salone")
 
     booking = {
         "booking_id": new_id("bkg"),
@@ -575,6 +673,69 @@ async def leave_waitlist(waitlist_id: str, user=Depends(get_user_from_token)):
 async def admin_waitlist(user=Depends(require_admin)):
     items = await waitlist_col.find({}, {"_id": 0}).sort("created_at", 1).to_list(500)
     return items
+
+# ---------------- SCHEDULE / TIME-OFF ----------------
+@api.get("/schedule")
+async def get_schedule():
+    """Public endpoint: current weekly schedule + upcoming time-off (for customer UI)."""
+    sched = await settings_col.find_one({"_id": "business_schedule"})
+    weekly = (sched or {}).get("weekly", {})
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    upcoming = await timeoff_col.find({"date_to": {"$gte": today}}, {"_id": 0}).sort("date_from", 1).to_list(100)
+    return {"weekly": weekly, "time_off": upcoming}
+
+@api.put("/admin/schedule")
+async def update_schedule(data: WeeklyScheduleIn, user=Depends(require_admin)):
+    # Basic validation
+    for k, wins in data.weekly.items():
+        if k not in [str(i) for i in range(7)]:
+            raise HTTPException(status_code=400, detail=f"Invalid day key: {k}")
+        for w in wins:
+            if not isinstance(w, list) or len(w) != 2:
+                raise HTTPException(status_code=400, detail="Each window must be [start, end]")
+            _parse_hhmm(w[0])
+            _parse_hhmm(w[1])
+    await settings_col.update_one(
+        {"_id": "business_schedule"},
+        {"$set": {"weekly": data.weekly}},
+        upsert=True,
+    )
+    return {"ok": True, "weekly": data.weekly}
+
+@api.get("/admin/time-off")
+async def list_time_off(user=Depends(require_admin)):
+    items = await timeoff_col.find({}, {"_id": 0}).sort("date_from", -1).to_list(500)
+    return items
+
+@api.post("/admin/time-off")
+async def create_time_off(data: TimeOffIn, user=Depends(require_admin)):
+    # Validate dates
+    df = parse_date(data.date_from)
+    dt = parse_date(data.date_to)
+    if dt < df:
+        raise HTTPException(status_code=400, detail="date_to prima di date_from")
+    if data.time_from:
+        _parse_hhmm(data.time_from)
+    if data.time_to:
+        _parse_hhmm(data.time_to)
+    doc = {
+        "time_off_id": new_id("to"),
+        "date_from": data.date_from,
+        "date_to": data.date_to,
+        "type": data.type,
+        "time_from": data.time_from,
+        "time_to": data.time_to,
+        "reason": data.reason or "",
+        "created_at": now_utc(),
+    }
+    await timeoff_col.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.delete("/admin/time-off/{time_off_id}")
+async def delete_time_off(time_off_id: str, user=Depends(require_admin)):
+    await timeoff_col.delete_one({"time_off_id": time_off_id})
+    return {"ok": True}
 
 async def notify_waitlist_for_slot(cancelled_booking: dict):
     """When a booking is cancelled, notify waitlist users for that date."""

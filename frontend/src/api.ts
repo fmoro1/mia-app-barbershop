@@ -53,4 +53,10 @@ export const api = {
   createPaymentIntent: (booking_id: string) => req("/payments/create-intent", { method: "POST", body: JSON.stringify({ booking_id }) }),
   changePassword: (current_password: string, new_password: string) =>
     req("/auth/change-password", { method: "POST", body: JSON.stringify({ current_password, new_password }) }),
+  getSchedule: () => req("/schedule", {}, false),
+  updateSchedule: (weekly: Record<string, [string, string][]>) =>
+    req("/admin/schedule", { method: "PUT", body: JSON.stringify({ weekly }) }),
+  listTimeOff: () => req("/admin/time-off"),
+  createTimeOff: (body: any) => req("/admin/time-off", { method: "POST", body: JSON.stringify(body) }),
+  deleteTimeOff: (id: string) => req(`/admin/time-off/${id}`, { method: "DELETE" }),
 };
