@@ -1053,11 +1053,30 @@ async def create_payment_intent(data: PayIntentIn, user=Depends(get_user_from_to
 
 # ---------------- REMINDER LOOP ----------------
 async def reminder_loop():
-    """Every 5 minutes, check bookings needing reminders."""
+    """Every 5 minutes: send reminders + auto-complete past bookings."""
     await asyncio.sleep(10)
     while True:
         try:
             now = now_utc()
+
+            # Auto-complete confirmed bookings whose end time has passed
+            past = await bookings_col.find({
+                "status": "confirmed",
+                "start_at": {"$lt": now},
+            }, {"_id": 0}).to_list(500)
+            for b in past:
+                sa = b["start_at"]
+                if isinstance(sa, str):
+                    sa = datetime.fromisoformat(sa)
+                if sa.tzinfo is None:
+                    sa = sa.replace(tzinfo=timezone.utc)
+                dur = int(b.get("duration_minutes", SLOT_MINUTES))
+                if now >= sa + timedelta(minutes=dur):
+                    await bookings_col.update_one(
+                        {"booking_id": b["booking_id"]},
+                        {"$set": {"status": "completed", "auto_completed_at": now}},
+                    )
+
             upcoming = await bookings_col.find({
                 "status": "confirmed",
                 "start_at": {"$gte": now, "$lt": now + timedelta(days=3)},
